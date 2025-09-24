@@ -1,0 +1,241 @@
+5) Consultas SQL + Perguntas de negócio (incluem SELECT, WHERE, expressões, ORDER BY, HAVING, JOIN)
+Sinta-se à vontade para rodar em sequência. As perguntas estão acima de cada consulta.
+
+5.1 Recuperações simples (SELECT) + ORDER BY
+Pergunta: Quais serviços estão no catálogo e seus preços, do mais caro para o mais barato?
+
+
+
+
+SQL
+SELECT id_servico, nome, categoria, preco_base
+FROM servicos
+ORDER BY preco_base DESC;
+
+5.2 Filtros (WHERE)
+Pergunta: Quais OS concluídas no mês atual (por data de abertura)?
+
+
+
+
+SQL
+SELECT id_os, id_veiculo, data_abertura, data_fechamento, forma_pagamento
+FROM ordens_servico
+WHERE status = 'Concluída'
+  AND YEAR(data_abertura) = YEAR(CURDATE())
+  AND MONTH(data_abertura) = MONTH(CURDATE())
+ORDER BY data_abertura DESC;
+
+5.3 Expressões / Atributos derivados (totais por item)
+Pergunta: Qual o total por item (com desconto), por OS?
+total_item = quantidade * preco_unitario * (1 - desconto_item/100)
+
+
+
+
+SQL
+SELECT 
+  io.id_os,
+  io.id_servico,
+  s.nome AS servico,
+  io.quantidade,
+  io.preco_unitario,
+  io.desconto_item,
+  ROUND(io.quantidade * io.preco_unitario * (1 - io.desconto_item/100), 2) AS total_item
+FROM itens_ordem io
+JOIN servicos s ON s.id_servico = io.id_servico
+ORDER BY io.id_os, s.nome;
+
+5.4 Expressões + JOIN + GROUP BY (total da OS com desconto da OS)
+Pergunta: Qual o total de cada OS considerando desconto da OS?
+subtotal = Σ(total_item) e total_os = subtotal * (1 - desconto_os/100)
+
+
+
+
+SQL
+WITH itens AS (
+  SELECT 
+    io.id_os,
+    SUM(io.quantidade * io.preco_unitario * (1 - io.desconto_item/100)) AS subtotal
+  FROM itens_ordem io
+  GROUP BY io.id_os
+)
+SELECT 
+  os.id_os,
+  v.placa,
+  os.status,
+  os.desconto_os,
+  ROUND(i.subtotal, 2) AS subtotal,
+  ROUND(i.subtotal * (1 - os.desconto_os/100), 2) AS total_os
+FROM ordens_servico os
+JOIN veiculos v ON v.id_veiculo = os.id_veiculo
+JOIN itens i ON i.id_os = os.id_os
+ORDER BY total_os DESC;
+
+
+Mostrar mais linhas
+5.5 JOIN múltiplo (visão detalhada da OS com cliente, veículo e itens)
+Pergunta: Quero ver a “fatura” detalhada da OS 1.
+
+
+
+
+SQL
+SELECT
+  os.id_os,
+  c.nome AS cliente,
+  v.placa, v.marca, v.modelo,
+  s.nome AS servico,
+  io.quantidade,
+  io.preco_unitario,
+  io.desconto_item,
+  ROUND(io.quantidade * io.preco_unitario * (1 - io.desconto_item/100), 2) AS total_item,
+  os.desconto_os,
+  os.forma_pagamento,
+  os.status
+FROM ordens_servico os
+JOIN veiculos v   ON v.id_veiculo = os.id_veiculo
+JOIN clientes c   ON c.id_cliente = v.id_cliente
+JOIN itens_ordem io ON io.id_os = os.id_os
+JOIN servicos s   ON s.id_servico = io.id_servico
+WHERE os.id_os = 1
+ORDER BY s.nome;
+
+
+Mostrar mais linhas
+5.6 HAVING (filtro por grupos)
+Pergunta: Quais clientes têm 2 ou mais OS concluídas?
+
+
+
+
+SQL
+SELECT
+  c.id_cliente,
+  c.nome,
+  COUNT(*) AS qtd_os_concluidas
+FROM clientes c
+JOIN veiculos v ON v.id_cliente = c.id_cliente
+JOIN ordens_servico os ON os.id_veiculo = v.id_veiculo
+WHERE os.status = 'Concluída'
+GROUP BY c.id_cliente, c.nome
+HAVING COUNT(*) >= 2
+ORDER BY qtd_os_concluidas DESC, c.nome;
+
+5.7 HAVING + período + categoria
+Pergunta: Receita por categoria de serviço nos últimos 60 dias (somente OS concluídas) — mostrar apenas categorias com receita > 400.
+
+
+
+
+SQL
+WITH total_por_item AS (
+  SELECT 
+    os.id_os,
+    s.categoria,
+    (io.quantidade * io.preco_unitario * (1 - io.desconto_item/100)) AS total_item
+  FROM ordens_servico os
+  JOIN itens_ordem io ON io.id_os = os.id_os
+  JOIN servicos s ON s.id_servico = io.id_servico
+  WHERE os.status = 'Concluída'
+    AND os.data_abertura >= DATE_SUB(CURDATE(), INTERVAL 60 DAY)
+),
+total_por_os AS (
+  SELECT id_os, categoria, SUM(total_item) AS subtotal_cat
+  FROM total_por_item
+  GROUP BY id_os, categoria
+),
+descontos_os AS (
+  SELECT id_os, desconto_os FROM ordens_servico
+)
+SELECT 
+  t.categoria,
+  ROUND(SUM(t.subtotal_cat * (1 - d.desconto_os/100)), 2) AS receita_categoria
+FROM total_por_os t
+JOIN descontos_os d USING (id_os)
+GROUP BY t.categoria
+HAVING SUM(t.subtotal_cat * (1 - d.desconto_os/100)) > 400
+ORDER BY receita_categoria DESC;
+
+
+Mostrar mais linhas
+5.8 TOP veículos por gasto (ORDER BY + JOIN + GROUP BY)
+Pergunta: Quais são os TOP 5 veículos por gasto total nos últimos 90 dias (apenas OS concluídas)?
+
+
+
+
+SQL
+WITH total_os AS (
+  SELECT 
+    os.id_os,
+    os.id_veiculo,
+    SUM(io.quantidade * io.preco_unitario * (1 - io.desconto_item/100)) AS subtotal
+  FROM ordens_servico os
+  JOIN itens_ordem io ON io.id_os = os.id_os
+  WHERE os.status = 'Concluída'
+    AND os.data_abertura >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)
+  GROUP BY os.id_os, os.id_veiculo
+)
+SELECT 
+  v.placa, v.marca, v.modelo,
+  ROUND(SUM(t.subtotal * (1 - os.desconto_os/100)), 2) AS gasto_total
+FROM total_os t
+JOIN ordens_servico os ON os.id_os = t.id_os
+JOIN veiculos v ON v.id_veiculo = t.id_veiculo
+GROUP BY v.id_veiculo, v.placa, v.marca, v.modelo
+ORDER BY gasto_total DESC
+LIMIT 5;
+
+
+Mostrar mais linhas
+5.9 Expressão de tempo (derivado)
+Pergunta: Quais OS estão em andamento há mais de 24 horas? (Backlog)
+
+
+
+
+SQL
+SELECT 
+  os.id_os,
+  v.placa,
+  os.data_abertura,
+  TIMESTAMPDIFF(HOUR, os.data_abertura, NOW()) AS horas_em_aberto
+FROM ordens_servico os
+JOIN veiculos v ON v.id_veiculo = os.id_veiculo
+WHERE os.status = 'Em andamento'
+  AND TIMESTAMPDIFF(HOUR, os.data_abertura, NOW()) > 24
+ORDER BY horas_em_aberto DESC;
+
+5.10 Consulta combinando tudo (WHERE + JOIN + HAVING + ORDER BY)
+Pergunta: Clientes com ticket médio (apenas OS concluídas) > 200 nos últimos 60 dias.
+
+
+
+
+SQL
+WITH total_os AS (
+  SELECT 
+    os.id_os,
+    v.id_cliente,
+    SUM(io.quantidade * io.preco_unitario * (1 - io.desconto_item/100)) AS subtotal
+  FROM ordens_servico os
+  JOIN veiculos v ON v.id_veiculo = os.id_veiculo
+  JOIN itens_ordem io ON io.id_os = os.id_os
+  WHERE os.status = 'Concluída'
+    AND os.data_abertura >= DATE_SUB(CURDATE(), INTERVAL 60 DAY)
+  GROUP BY os.id_os, v.id_cliente
+)
+SELECT 
+  c.id_cliente,
+  c.nome,
+  ROUND(AVG(t.subtotal * (1 - os.desconto_os/100)), 2) AS ticket_medio
+FROM total_os t
+JOIN ordens_servico os ON os.id_os = t.id_os
+JOIN clientes c ON c.id_cliente = t.id_cliente
+GROUP BY c.id_cliente, c.nome
+HAVING AVG(t.subtotal * (1 - os.desconto_os/100)) > 200
+ORDER BY ticket_medio DESC;
+
+
