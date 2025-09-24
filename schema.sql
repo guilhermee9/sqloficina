@@ -1,10 +1,6 @@
--- Opcional: schema
 -- CREATE DATABASE IF NOT EXISTS oficina_db CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 -- USE oficina_db;
 
--- ===============================
--- CLIENTES
--- ===============================
 CREATE TABLE clientes (
   id_cliente INT AUTO_INCREMENT PRIMARY KEY,
   nome       VARCHAR(80) NOT NULL,
@@ -14,9 +10,7 @@ CREATE TABLE clientes (
   CONSTRAINT uk_clientes_cpf UNIQUE (cpf)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ===============================
--- VEÍCULOS
--- ===============================
+
 CREATE TABLE veiculos (
   id_veiculo INT AUTO_INCREMENT PRIMARY KEY,
   id_cliente INT NOT NULL,
@@ -31,9 +25,7 @@ CREATE TABLE veiculos (
     ON UPDATE CASCADE ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ===============================
--- SERVIÇOS (catálogo)
--- ===============================
+
 CREATE TABLE servicos (
   id_servico        INT AUTO_INCREMENT PRIMARY KEY,
   nome              VARCHAR(80) NOT NULL,
@@ -42,9 +34,7 @@ CREATE TABLE servicos (
   minutos_estimados INT NOT NULL DEFAULT 60
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ===============================
--- ORDEM DE SERVIÇO (OS)
--- ===============================
+
 CREATE TABLE ordens_servico (
   id_os            INT AUTO_INCREMENT PRIMARY KEY,
   id_veiculo       INT NOT NULL,
@@ -59,9 +49,7 @@ CREATE TABLE ordens_servico (
     ON UPDATE CASCADE ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ===============================
--- ITENS DA OS (ligação N:N com serviços)
--- ===============================
+
 CREATE TABLE itens_ordem (
   id_os           INT NOT NULL,
   id_servico      INT NOT NULL,
